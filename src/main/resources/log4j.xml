@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE log4j:configuration SYSTEM "log4j.dtd">
+<log4j:configuration xmlns:log4j="http://jakarta.apache.org/log4j/">
+	<appender name="CONSOLE" class="org.apache.log4j.ConsoleAppender">
+		<param name="Threshold" value="INFO" />
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss} %-5p %C %m%n" />
+		</layout>
+	</appender>
+	<appender name="File" class="org.apache.log4j.DailyRollingFileAppender">
+		<param name="File" value="${APP_PATH}/log/error/error.log" />
+		<param name="Threshold" value="INFO" />
+		<param name="DatePattern" value="'.'yyyy-MM-dd'.log'" />
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss} %-5p %c [%t] %m%n" />
+		</layout>
+	</appender>
+	<appender name="testDAO" class="org.apache.log4j.DailyRollingFileAppender">
+		<param name="File" value="${APP_PATH}/log/test/log.log" />
+		<param name="Threshold" value="INFO" />
+		<param name="DatePattern" value="'.'yyyy-MM-dd'.log'" />
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss} %-5p %c [%t] %m%n" />
+		</layout>
+	</appender>
+
+	<logger name="wuhao.tools.utils.HttpUtil">
+		<level value="error"/>
+		<appender-ref ref="CONSOLE" />
+	</logger>
+	<logger name="com.zy.test.TestDAO">
+		<level value="info"/>
+		<appender-ref ref="testDAO" />
+	</logger>
+	<category name="org.hibernate" additivity="false">
+		<level value="error"/>
+		<appender-ref ref="CONSOLE"/>
+	</category>
+	<category name="org.hibernate.cache">
+		<level value="error"/>
+		<appender-ref ref="CONSOLE"/>
+	</category>
+	<category name="org.apache" additivity="false">
+		<level value="info"/>
+		<appender-ref ref="CONSOLE"/>
+	</category>
+	<category name="org.springframework" additivity="false">
+		<level value="debug"/>
+		<appender-ref ref="CONSOLE"/>
+	</category>
+	<category name="org.apache.commons.httpclient">
+		<level value="error"/>
+	</category>
+	<root>
+		<priority value="INFO" />
+		<appender-ref ref="CONSOLE" />
+	</root>
+</log4j:configuration>

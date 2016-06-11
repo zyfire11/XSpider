@@ -1,0 +1,8 @@
+<component name="ArtifactManager">
+  <artifact type="war" name="XSpider:war">
+    <output-path>$PROJECT_DIR$/target</output-path>
+    <root id="archive" name="XSpider.war">
+      <element id="artifact" artifact-name="XSpider:war exploded" />
+    </root>
+  </artifact>
+</component>

@@ -47,6 +47,7 @@ public class LoginSina {
     private static String door;
     private static Map<String, String> headers;
     private static String locationUrl;
+    private static String cookieStr;
 
 
     public LoginSina(String username, String password){
@@ -133,7 +134,7 @@ public class LoginSina {
         System.out.println(HttpUtils.setCookie2String(this.cookies));
 
         this.headers=headers;
-        String responseText=HttpUtils.getStringFromResponse2(response, "gbk");
+        String responseText=HttpUtils.getStringFromResponseByCharset(response, "gbk");
         try {
 //			responseText=new String(responseText.getBytes(),"GBK");
             responseText= URLDecoder.decode(responseText, "GBK");
@@ -186,12 +187,65 @@ public class LoginSina {
             headers.put("Cookie", cookieStr);
             response = HttpUtils.doGet("http://weibo.com/signup/full_info.php", headers);
 
-            responseText = HttpUtils.getStringFromResponse2(response, "utf8");
+            responseText = HttpUtils.getStringFromResponseByCharset(response, "utf8");
             System.out.println(responseText);
         }
 
-
+        this.cookieStr = HttpUtils.setCookie2String(this.cookies);
         return HttpUtils.setCookie2String(this.cookies);
+    }
+
+    private void register(){
+        String url = "http://weibo.com/signup/v5/fullinfo";
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "*/*");
+        headers.put("Referer", "http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com");
+        headers.put("Accept-Language", "zh-cn");
+        headers.put("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; BOIE9;ZHCN");
+        headers.put("Host", "weibo.com");
+        headers.put("Content-Type", "application/x-www-form-urlencoded");
+        headers.put("Cookie", cookieStr);
+    }
+
+    private void repeatName(String name){
+        String url = "http://weibo.com/signup/v5/formcheck?type=nickname&value=" + name +"&__rnd=" + System.currentTimeMillis();
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "*/*");
+        headers.put("Referer", "http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com");
+        headers.put("Accept-Language", "zh-cn");
+        headers.put("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; BOIE9;ZHCN");
+        headers.put("Host", "weibo.com");
+        headers.put("Content-Type", "application/x-www-form-urlencoded");
+        headers.put("Cookie", cookieStr);
+        HttpResponse response = HttpUtils.doGet(url, headers);
+        String data = HttpUtils.getStringFromResponse(response);
+        System.out.println(data);
+        if(data.contains("\"code\":\"600001\"")){
+            System.out.println("需要换昵称");
+        }else {
+            System.out.println("昵称是新的");
+        }
+
+
+    }
+
+    private  void sendMesage(String phone){
+        String url = "http://weibo.com/signup/v5/formcheck?type=verifybind&zone=0086&value=" + phone + "&_t=0&__rnd=" + System.currentTimeMillis();
+        Map<String, String> headers = new HashMap<>();
+        headers.put("Accept", "*/*");
+        headers.put("Referer", "http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com");
+        headers.put("Accept-Language", "zh-cn");
+        headers.put("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; BOIE9;ZHCN");
+        headers.put("Host", "weibo.com");
+        headers.put("Content-Type", "application/x-www-form-urlencoded");
+        headers.put("Cookie", cookieStr);
+        HttpResponse response = HttpUtils.doGet(url, headers);
+        String data = HttpUtils.getStringFromResponseByCharset(response, "utf8");
+        System.out.println(data);
+    }
+
+    private void getAuthCode(){
+
     }
 
 

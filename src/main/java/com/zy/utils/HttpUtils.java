@@ -607,7 +607,7 @@ public class HttpUtils {
 		return responseText;
 	}
 	
-	public static String getStringFromResponse2(HttpResponse response, String format){
+	public static String getStringFromResponseByCharset(HttpResponse response, String format){
 		if(response==null){
 			return null;
 		}

@@ -14,20 +14,24 @@ import java.util.List;
  */
 public class TianMaAPI {
 
-    private static String username;
-    private static String password;
+    private static String username="zyfire11";
+    private static String password="";
     private static String token;
     private static Double balance;
     private static String itemId="171";
     private static Logger log = Logger.getLogger(TianMaAPI.class);
 
+    public TianMaAPI(){
+        doLogin();
+    }
     public TianMaAPI(String username, String password){
         this.username = username;
         this.password = password;
+        doLogin();
     }
 
     //登录：http://api.tianma168.com/tm/Login?uName=用户名&pWord=密码&Developer=开发者参数
-    private void doLogin(){
+    public void doLogin(){
         String url = "http://api.tianma168.com/tm/Login";
         url += "?uName="+ username + "&pWord=" + password + "&Developer=";
         HttpResponse response = HttpUtils.doGet(url, null);
@@ -53,7 +57,7 @@ public class TianMaAPI {
     }
 
     //获取号码：http://api.tianma168.com/tm/getPhone?ItemId=项目ID&token=登陆token
-    private List<String> getPhone(int num){
+    public List<String> getPhone(int num){
         List<String> numberList = new ArrayList<>();
         String url = "http://api.tianma168.com/tm/getPhone?ItemId=" + itemId + "&token=" + token
                 + "&Count=" + num + "&Area=&PhoneType=0";
@@ -67,7 +71,7 @@ public class TianMaAPI {
         return numberList;
     }
     //获取短信：http://api.tianma168.com/tm/getMessage?token=登陆token&itemId=项目ID&phone=手机号码
-    private String getSMS(String phone){
+    public String getSMS(String phone){
         int num = 15;
         while (num > 0) {
             String url = "http://api.tianma168.com/tm/getMessage?token=" + token + "&itemId=" + itemId + "&phone=" + phone;
@@ -91,7 +95,7 @@ public class TianMaAPI {
     }
 
     //释放手机号：http://api.tianma168.com/tm/releasePhone?token=登陆token&phoneList=phone-itemId;phone-itemId;
-    private boolean releasePhone(String phone){
+    public boolean releasePhone(String phone){
         String list = phone + "-" + itemId + ";";
         String url = "http://api.tianma168.com/tm/releasePhone?token="+ token +"&phoneList=" + list;
         HttpResponse response = HttpUtils.doGet(url, null);
@@ -105,7 +109,7 @@ public class TianMaAPI {
     }
 
     //发送短信：http://api.tianma168.com/tm/sendMessage?token=登陆token&Phone=手机号&ItemId=项目ID&Msg=短信内容
-    private boolean sendMessage(String message, String phone){
+    public boolean sendMessage(String message, String phone){
         String url = "http://api.tianma168.com/tm/sendMessage?token=" + token + "&Phone=" + phone + "&ItemId="+ itemId +"&Msg=" + message;
         HttpResponse response = HttpUtils.doGet(url, null);
         String data = HttpUtils.getStringFromResponseByCharset(response, "GB2312");
@@ -118,20 +122,23 @@ public class TianMaAPI {
     }
 
     //加黑号码
-    private boolean blackPhone(String phone){
+    public boolean blackPhone(String phone){
         String list = phone + "-" + itemId + ";";
         String url = "http://api.tianma168.com/tm/addBlack?token=" + token + "&phoneList=" + list;
         HttpResponse response = HttpUtils.doGet(url, null);
         String data = HttpUtils.getStringFromResponseByCharset(response, "GB2312");
         System.out.println("加黑号码的状态：" + data);
-        if(data.contains("OK")){
+        //随带释放号码
+        releasePhone(phone);
+        if(data.contains("Ok") || data.contains("OK") || data.contains("ok")){
             return true;
         }else {
             return false;
         }
+
     }
     //退出：http://api.tianma168.com/tm/Exit?token=登陆token
-    private boolean exit(){
+    public boolean exit(){
         String url = "http://api.tianma168.com/tm/Exit?token=" + token;
         HttpResponse response = HttpUtils.doGet(url, null);
         String data = HttpUtils.getStringFromResponseByCharset(response, "GB2312");
@@ -147,7 +154,7 @@ public class TianMaAPI {
 
     public static void main(String[] args) {
         String username = "zyfire11";
-        String password = "asdf1234";
+        String password = "";
         TianMaAPI api = new TianMaAPI(username, password);
 //        api.doLogin();
         token = "BWjh7ATcE1pNbNBETiui1fZEtkF5i8969";

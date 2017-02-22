@@ -1,21 +1,25 @@
 package com.zy.sina;
 
-import com.zy.utils.Base64Encoder;
-import com.zy.utils.EncodeUtils;
-import com.zy.utils.HttpUtils;
-import com.zy.utils.RegexUtil;
+import com.zy.tianma.TianMaAPI;
+import com.zy.utils.*;
+import com.zy.uudama.UUHttpAPI;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.logging.Log;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.cookie.Cookie;
+import org.apache.log4j.Logger;
 import org.apache.struts2.components.Head;
 import wuhao.tools.elasticsearch.bean.Http;
+import wuhao.tools.reader.PathUtil;
+import wuhao.tools.utils.UUIDUtil;
 
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
+import java.io.File;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.URLDecoder;
@@ -38,6 +42,7 @@ public class LoginSina {
 
     private static String username;
     private static String password;
+    private static String nickName;
     private static String nonce;
     private static String rsakv;
     private static String servertime;
@@ -45,21 +50,23 @@ public class LoginSina {
     private static String pcid;
     private static List<Cookie> cookies;
     private static String door;
-    private static Map<String, String> headers;
+    private static Map<String, String> headers = new HashMap<>();
     private static String locationUrl;
     private static String cookieStr;
+    private static Logger log = Logger.getLogger(LoginSina.class);
 
 
-    public LoginSina(String username, String password){
+    public LoginSina(String username, String password, String nickName){
         this.username = username;
         this.password = password;
+        this.nickName = nickName;
         init();
     }
 
     //初始化得到服务区的时间和一次性字符串
     public void init(){
         String url=compositeUrl();
-        Map<String,String> headers=new HashMap<String,String>();
+//        Map<String,String> headers=new HashMap<String,String>();
         headers.put("Accept", "*/*");
         headers.put("Referer", "http://weibo.com/");
         headers.put("Accept-Language", "zh-cn");
@@ -185,17 +192,76 @@ public class LoginSina {
             headers.put("Host", "weibo.com");
             headers.put("Referer", "http://weibo.com/");
             headers.put("Cookie", cookieStr);
-            response = HttpUtils.doGet("http://weibo.com/signup/full_info.php", headers);
+            this.cookieStr = cookieStr;
+            this.cookies = HttpUtils.getResponseCookies(response);
+            response = HttpUtils.doGet("http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com", headers);
 
             responseText = HttpUtils.getStringFromResponseByCharset(response, "utf8");
             System.out.println(responseText);
+            register(responseText, nickName);
         }
 
         this.cookieStr = HttpUtils.setCookie2String(this.cookies);
         return HttpUtils.setCookie2String(this.cookies);
     }
 
-    private void register(){
+    private void register(String html, String nickName){
+
+
+        Map<String, String> params = new HashMap<>();
+        //校对用户名
+        nickName = repeatName(nickName);
+        params.put("nickname", nickName);
+
+        String birthday = "1990-1-1";
+        String gender = "1";   //1为男
+        Map<String, String> inputMap = new HashMap<>();
+        List<String> inputList = RegexUtil.getAllMatcherListRegex(html, "<input type=\"hidden\" name=\"[\\da-z]{32}\" value=\"[\\da-z]{32}\">");
+        for(String input : inputList){
+            String key = RegexUtil.getMatchGroupRegex(input, "name=\"([\\da-z]{32})\" value=\"([\\da-z]{32})\">", 1);
+            String value = RegexUtil.getMatchGroupRegex(input, "name=\"([\\da-z]{32})\" value=\"([\\da-z]{32})\">", 2);
+            inputMap.put(key, value);
+        }
+        String regtime = RegexUtil.getMatchGroupRegex(html, "name=\"regtime\" value=\"(.*?)\"");
+        String salttime = RegexUtil.getMatchGroupRegex(html, "name=\"salttime\" value=\"(.*?)\"");
+        String sinaid = RegexUtil.getMatchGroupRegex(html, "name=\"sinaid\" value=\"(.*?)\"");
+        String page = RegexUtil.getMatchGroupRegex(html, "name=\"page\" value=\"(.*?)\"");
+        String lang = RegexUtil.getMatchGroupRegex(html, "name=\"lang\" value=\"(.*?)\"");
+        String province = "32";
+        String city = "1";
+        String rejectFake = "clickCount%3D10%26subBtnClick%3D0%26keyPress%3D14%26menuClick%3D0%26mouseMove%3D2407%26checkcode%3D0%26subBtnPosx%3D792%26subBtnPosy%3D521%26subBtnDelay%3D167%26keycode%3D97%2C115%2C100%2C115%2C115%2C97%2C100%2C97%2C115%2C100%2C109%2C107%2C119%2C55%26winWidth%3D1920%26winHeight%3D955%26userAgent%3DMozilla%2F5.0%20(Windows%20NT%206.1%3B%20WOW64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F47.0.2526.106%20Safari%2F537.36";
+        String replaceurl = "http://weibo.com/signup/v5/ajaxreg";
+
+        params.put("birthday", birthday);
+        params.put("gender", gender);
+        for(Map.Entry<String, String> entry : inputMap.entrySet()){
+            params.put(entry.getKey(), entry.getValue());
+        }
+        params.put("regtime", regtime);
+        params.put("salttime", salttime);
+        params.put("sinaid", sinaid);
+        params.put("page", page);
+        params.put("lang", lang);
+        params.put("province", province);
+        params.put("city", city);
+        params.put("rejectFake", rejectFake);
+        params.put("replaceurl", replaceurl);
+
+        //获取验证码
+        String path = downloadCheckImage(sinaid, regtime);
+        try {
+            UUHttpAPI api = new UUHttpAPI();
+            api.setIMGPATH(path);
+            String pincode = api.getImageValue("1004");
+            System.out.println("验证码：" + pincode);
+
+
+            params.put("pincode", pincode);
+        }catch (Exception e){
+            e.printStackTrace();
+        }
+
+
         String url = "http://weibo.com/signup/v5/fullinfo";
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "*/*");
@@ -205,9 +271,71 @@ public class LoginSina {
         headers.put("Host", "weibo.com");
         headers.put("Content-Type", "application/x-www-form-urlencoded");
         headers.put("Cookie", cookieStr);
+
+        HttpResponse response = HttpUtils.doPost(url, headers, params);
+        String data = HttpUtils.getStringFromResponse(response);
+        System.out.println("提交注册表单得到：" + data);
+
+        String smsUrl = RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)");
+        if(!smsUrl.equals("")){
+            log.info("注册信息提交无误");
+            //调用天码获取电话号码
+            TianMaAPI tianma = new TianMaAPI();
+            List<String> phoneList = tianma.getPhone(2);
+            String realPhone = "";
+            while(true){
+                for(String phone : phoneList){
+                    //获取到号码其他号码就释放掉
+                    if(!realPhone.equals("")){
+                        tianma.releasePhone(phone);
+                    }
+                    boolean flag = sendMesage(phone);
+                    if(flag){
+                        realPhone = phone;
+                    }else {
+                        //不能注册就拉黑
+                        tianma.blackPhone(phone);
+                    }
+                }
+                if(!realPhone.equals("")){
+                    break;
+                }
+                try {
+                    Thread.sleep(1000L);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+                phoneList = tianma.getPhone(2);
+            }
+            log.info("账号：" + username + ",绑定到：" + realPhone);
+
+        }else{
+            log.info("注册信息提交出现问题");
+        }
+
     }
 
-    private void repeatName(String name){
+    // 下载验证码
+    private String downloadCheckImage(String sinaId, String regtime) {
+
+        String cookieValue = HttpUtils.setCookie2String(this.cookies);
+        this.headers.put("Cookie", cookieValue);
+        this.headers.put("Host", "weibo.com");
+//        headers.put("Referer", "http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com");
+        headers.put("Referer", "http://weibo.com/signup/full_info.php");
+        String url = "http://weibo.com/signup/v5/pincode/pincode.php?lang=zh&sinaId="+ sinaId +"&r=" + regtime;
+        HttpResponse response = HttpUtils.doGet(url, headers);
+        InputStream in = HttpUtils.getInputStreamFromResponse(response);
+        String path = PathUtil.getProjectRoot() + "/web/image/validate_code/" + UUIDUtil.getUUID(false) + ".jpeg";
+        File file = new File(path);
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        Utils.writeFileFromStream(path, in);
+        return path;
+    }
+
+    private String repeatName(String name){
         String url = "http://weibo.com/signup/v5/formcheck?type=nickname&value=" + name +"&__rnd=" + System.currentTimeMillis();
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "*/*");
@@ -216,20 +344,35 @@ public class LoginSina {
         headers.put("User-Agent", "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0; BOIE9;ZHCN");
         headers.put("Host", "weibo.com");
         headers.put("Content-Type", "application/x-www-form-urlencoded");
+        headers.put("X-Requested-With", "XMLHttpRequest");
         headers.put("Cookie", cookieStr);
         HttpResponse response = HttpUtils.doGet(url, headers);
         String data = HttpUtils.getStringFromResponse(response);
         System.out.println(data);
-        if(data.contains("\"code\":\"600001\"")){
-            System.out.println("需要换昵称");
-        }else {
+        if(data.contains("\"code\":\"100000\"")){
             System.out.println("昵称是新的");
+            return name;
+        }else {
+            //拿推荐昵称中长度最短的
+            String message = EncodeUtils.unicdoeToGB2312(RegexUtil.getMatchGroupRegex(data, "\"msg\":\"(.*?)\""));
+            String iodata = EncodeUtils.unicdoeToGB2312(RegexUtil.getMatchGroupRegex(data, "\"iodata\":\\[(.*?)\\]\\}"));
+            System.out.println("昵称重合提示信息：" + message + ",推荐下列未使用过的昵称：" + iodata);
+            List<String> nameList = RegexUtil.getAllMatcherListRegexGroup(iodata, "\"(.*?)\"");
+            name = nameList.get(0);
+            for(String nickName : nameList){
+                if(name.length() > nickName.length()){
+                    name = nickName;
+                }
+            }
+            log.info("获取推断昵称：" + name);
+            return name;
         }
 
 
     }
 
-    private  void sendMesage(String phone){
+    //手机号码是否已被注册
+    private boolean sendMesage(String phone){
         String url = "http://weibo.com/signup/v5/formcheck?type=verifybind&zone=0086&value=" + phone + "&_t=0&__rnd=" + System.currentTimeMillis();
         Map<String, String> headers = new HashMap<>();
         headers.put("Accept", "*/*");
@@ -242,6 +385,13 @@ public class LoginSina {
         HttpResponse response = HttpUtils.doGet(url, headers);
         String data = HttpUtils.getStringFromResponseByCharset(response, "utf8");
         System.out.println(data);
+        if(data.contains("\"type\":\"err\"")){
+            String message = EncodeUtils.unicdoeToGB2312(RegexUtil.getMatchGroupRegex(data, "\"msg\":\"(.*?)<a"));
+            log.info("手机号码：" + phone + "，不能绑定：" + message);
+            return false;
+        }else{
+            return true;
+        }
     }
 
     private void getAuthCode(){
@@ -340,7 +490,10 @@ public class LoginSina {
     public static void main(String[] args) {
         String username = "yizh199202@sina.com";
         String password = "asdf1234";
-        LoginSina login = new LoginSina(username, password);
+//        String nickName = "asdssadasd";
+        String nickName = "asdf";
+        LoginSina login = new LoginSina(username, password, nickName);
         login.dologinSina();
+
     }
 }

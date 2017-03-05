@@ -53,6 +53,10 @@ public class LoginSina {
     private static Map<String, String> headers = new HashMap<>();
     private static String locationUrl;
     private static String cookieStr;
+
+    //手机号码rsa加密的公钥
+    private static String configKey;
+    private static String configKeyPlus;
     private static Logger log = Logger.getLogger(LoginSina.class);
 
 
@@ -132,8 +136,8 @@ public class LoginSina {
 
         if(this.pcid!=null)
 //            params.put("pcid", pcid);
-        if(this.door!= null)
-            params.put("door", this.door);
+            if(this.door!= null)
+                params.put("door", this.door);
 
         HttpResponse response= HttpUtils.doPost(url, headers, params);
         this.cookies=HttpUtils.getResponseCookies(response);
@@ -198,6 +202,7 @@ public class LoginSina {
 
             responseText = HttpUtils.getStringFromResponseByCharset(response, "utf8");
             System.out.println(responseText);
+
             register(responseText, nickName);
         }
 
@@ -206,7 +211,6 @@ public class LoginSina {
     }
 
     private void register(String html, String nickName){
-
 
         Map<String, String> params = new HashMap<>();
         //校对用户名
@@ -280,34 +284,51 @@ public class LoginSina {
         if(!smsUrl.equals("")){
             log.info("注册信息提交无误");
             //调用天码获取电话号码
-            TianMaAPI tianma = new TianMaAPI();
-            List<String> phoneList = tianma.getPhone(2);
-            String realPhone = "";
-            while(true){
-                for(String phone : phoneList){
-                    //获取到号码其他号码就释放掉
-                    if(!realPhone.equals("")){
-                        tianma.releasePhone(phone);
-                    }
-                    boolean flag = sendMesage(phone);
-                    if(flag){
-                        realPhone = phone;
-                    }else {
-                        //不能注册就拉黑
-                        tianma.blackPhone(phone);
-                    }
-                }
-                if(!realPhone.equals("")){
-                    break;
-                }
-                try {
-                    Thread.sleep(1000L);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                phoneList = tianma.getPhone(2);
-            }
+//            TianMaAPI tianma = new TianMaAPI();
+//            List<String> phoneList = tianma.getPhone(10);
+            String realPhone = "15950545100";
+//            while(true){
+//                for(String phone : phoneList){
+//                    //获取到号码其他号码就释放掉
+//                    if(!realPhone.equals("")){
+//                        tianma.releasePhone(phone);
+//                    }
+//                    boolean flag = sendMesage(phone);
+//                    if(flag){
+//                        realPhone = phone;
+//                    }else {
+//                        //不能注册就拉黑
+//                        tianma.blackPhone(phone);
+//                    }
+//                }
+//                if(!realPhone.equals("")){
+//                    break;
+//                }
+//                try {
+//                    Thread.sleep(1000L);
+//                } catch (InterruptedException e) {
+//                    e.printStackTrace();
+//                }
+//                phoneList = tianma.getPhone(10);
+//            }
             log.info("账号：" + username + ",绑定到：" + realPhone);
+
+            //获取mobile的加密代码
+            configKey = RegexUtil.getMatchGroupRegex(html, "\\$CONFIG\\.key = '(.*?)'");
+            configKeyPlus = RegexUtil.getMatchGroupRegex(html, "\\$CONFIG\\.key_plus = '(.*?)'");
+            String rsaStr = rsaCrypt(configKey, configKeyPlus, realPhone);
+
+
+            url = "http://weibo.com/signup/v5/getpincode?entry=&mobile=" + rsaStr + "&_t=0&__rnd=" + System.currentTimeMillis();
+            response = HttpUtils.doGet(url, headers);
+            data = HttpUtils.getStringFromResponse(response);
+            data = EncodeUtils.unicdoeToGB2312(data).replaceAll("\\\\", "");
+            System.out.println(data);
+
+            String code = RegexUtil.getMatchGroupRegex(data, "<span class=\"spc_txt\">(\\d{6})</span> 至 <span class=\"spc_txt\">(.*?)</span>", 1);
+            String toPhone = RegexUtil.getMatchGroupRegex(data, "<span class=\"spc_txt\">(\\d{6})</span> 至 <span class=\"spc_txt\">(.*?)</span>", 2);
+            toPhone = toPhone.replaceAll(" ", "");
+            System.out.println("手机验证码：" + code + ",发送到：" + toPhone);
 
         }else{
             log.info("注册信息提交出现问题");
@@ -488,12 +509,17 @@ public class LoginSina {
     }
 
     public static void main(String[] args) {
-        String username = "yizh199202@sina.com";
+        String username = "yizh199203@sina.com";
         String password = "asdf1234";
 //        String nickName = "asdssadasd";
         String nickName = "asdf";
         LoginSina login = new LoginSina(username, password, nickName);
         login.dologinSina();
 
+//        String key = "BD325CE52FC6BA090AC0C7A2039236587F99C30FA518F601F2AD33019514EE5A4340A964853E1BDF5374AB4AC22F5CFF3288E5DB94E6752B4999972DF4E23DACACAE4E4DCFB6CBAE256F1B19C4BA892D54C7A3E068F93AB47EC50635556FC223F02CB1F520631E2F03E5509B6C1E24DFB7962BCD6DC74159BF0E5AFC03D9A00D";
+//        String keyplus = "10001";
+//        String mobile = "15950545100";
+//        String str = LoginSina.rsaCrypt(key, keyplus, mobile);
+//        System.out.println(str);
     }
 }

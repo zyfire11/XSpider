@@ -2,23 +2,23 @@ package com.zy.utils;
 
 import java.io.*;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Random;
-import java.util.Set;
+import java.util.*;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.X509TrustManager;
 
+import com.zy.config.ProxyConfig;
 import org.apache.http.Header;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpHost;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpVersion;
 import org.apache.http.NameValuePair;
+import org.apache.http.auth.AuthScope;
+import org.apache.http.auth.UsernamePasswordCredentials;
 import org.apache.http.client.ClientProtocolException;
+import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
@@ -37,9 +37,11 @@ import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
 import org.apache.http.impl.cookie.BasicClientCookie;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.params.BasicHttpParams;
 import org.apache.http.params.CoreConnectionPNames;
@@ -87,7 +89,34 @@ public class HttpUtils {
 		}
 		return response;		
 	}
-	
+
+	public static HttpResponse doGetByProxy(String url,Map<String,String> headers, boolean isSwitch){
+		HttpClient client=getAbuyunHttpClient(isSwitch);
+		client.getParams().setParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, 60000);
+//		client.getParams().setParameter(ClientPNames.ALLOW_CIRCULAR_REDIRECTS, true);
+		HttpGet getMethod=new HttpGet(url);
+		HttpResponse response=null;
+		try {
+			if(headers!=null && headers.keySet().size()>0){
+				for(String key:headers.keySet()){
+					getMethod.addHeader(key, headers.get(key));
+				}
+			}
+			response=client.execute(getMethod);
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			String msg=e.getMessage();
+			if(msg.contains("Truncated chunk")){
+				System.out.println(e.getMessage() +" 数据获取不完整。需要重新获取。");
+			}else{
+				System.out.println(e.getMessage() +" 连接 被拒绝。需要降低爬取频率。");
+			}
+		} catch(Exception e){
+		}
+		return response;
+	}
+
 	public static HttpResponse doGetTest(String url,Map<String,String> headers){
 		HttpClient client=createHttpClient();
 		client.getParams().setParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, 60000);
@@ -207,7 +236,7 @@ public class HttpUtils {
 	* @param base
 	* @return
 	*/
-	public static HttpClient wrapClient(HttpClient base) {
+	public static DefaultHttpClient wrapClient(HttpClient base) {
 		try {
 			SSLContext ctx = SSLContext.getInstance("TLS");
 			X509TrustManager tm = new X509TrustManager() {
@@ -662,5 +691,73 @@ public class HttpUtils {
 		httpclient.getParams().setParameter(ConnRoutePNames.DEFAULT_PROXY,proxy);
 		httpclient.getParams().setParameter(CoreProtocolPNames.PROTOCOL_VERSION, HttpVersion.HTTP_1_1);
 		return httpclient;
+	}
+
+	//4.1
+	private static HttpClient getAbuyunHttpClient(boolean isSwitch){
+//		HttpClient httpClient = createHttpClient();
+		HttpParams params = new BasicHttpParams();
+		HttpProtocolParams.setVersion(params, HttpVersion.HTTP_1_1);
+		HttpProtocolParams.setContentCharset(params, "UTF-8");
+		ThreadSafeClientConnManager clientmanager = new ThreadSafeClientConnManager();
+		clientmanager.setMaxTotal(20);
+		DefaultHttpClient client = new DefaultHttpClient(clientmanager, params);
+		client = wrapClient(client);
+
+		BasicHeader header = new BasicHeader("Proxy-Switch-Ip", "yes");
+		List<Header> list = new ArrayList<Header>();
+		list.add(header);
+		if(isSwitch) {
+//			client.getParams().setParameter("http.default-headers", list);
+		}
+
+
+		HttpHost target = new HttpHost(ProxyConfig.proxyHost, ProxyConfig.proxyPort, "http");
+
+		CredentialsProvider credsProvider = new BasicCredentialsProvider();
+		credsProvider.setCredentials(
+				new AuthScope(target.getHostName(), target.getPort()),
+				new UsernamePasswordCredentials(ProxyConfig.proxyUser, ProxyConfig.proxyPassword));
+
+
+		client.setCredentialsProvider(credsProvider);
+//		client.getParams().setParameter(ConnRouteParams.DEFAULT_PROXY, target);
+
+
+//		CloseableHttpClient httpClient = null;
+//		if(isSwitch) {
+//			httpClient = HttpClients.custom()
+//					.setDefaultCredentialsProvider(credsProvider)
+//					.setDefaultHeaders(list).build();
+//		}else{
+//			httpClient = HttpClients.custom()
+//					.setDefaultCredentialsProvider(credsProvider).build();
+//		}
+		return client;
+
+	}
+
+	//测试代理ip
+	public static String getIp(){
+		String targetUrl = "https://test.abuyun.com/proxy.php";
+		Map<String, String> headers = new HashMap<>();
+		headers.put("Proxy-Switch-Ip", "yes");
+		HttpResponse response = doGetByProxy(targetUrl, headers, true);
+		String html = HttpUtils.getStringFromResponseByCharset(response, "gbk");
+//		System.out.println(html);
+		String ipAddress = RegexUtil.getMatchGroupRegex(html, "<th>client-ip</th><td>(.*?)</td>");
+
+		return ipAddress;
+	}
+
+	public static void main(String[] args) {
+		for (int i = 0; i < 10; i ++){
+			System.out.println(getIp());
+			try {
+				Thread.sleep(2 * 1000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
 	}
 }

@@ -130,6 +130,11 @@
       <version>4.1.2</version>
     </dependency>
 
+    <dependency>
+      <groupId>org.jsoup</groupId>
+      <artifactId>jsoup</artifactId>
+      <version>1.7.2</version>
+    </dependency>
 
 
   </dependencies>

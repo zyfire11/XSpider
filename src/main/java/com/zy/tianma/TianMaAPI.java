@@ -15,7 +15,7 @@ import java.util.List;
 public class TianMaAPI {
 
     private static String username="zyfire11";
-    private static String password="";
+    private static String password="asdf1234";
     private static String token;
     private static Double balance;
     private static String itemId="171";

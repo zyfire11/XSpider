@@ -4,13 +4,10 @@ import com.zy.tianma.TianMaAPI;
 import com.zy.utils.*;
 import com.zy.uudama.UUHttpAPI;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.logging.Log;
 import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.cookie.Cookie;
 import org.apache.log4j.Logger;
-import org.apache.struts2.components.Head;
-import wuhao.tools.elasticsearch.bean.Http;
 import wuhao.tools.reader.PathUtil;
 import wuhao.tools.utils.UUIDUtil;
 
@@ -233,7 +230,7 @@ public class LoginSina {
         String lang = RegexUtil.getMatchGroupRegex(html, "name=\"lang\" value=\"(.*?)\"");
         String province = "32";
         String city = "1";
-        String rejectFake = "clickCount%3D10%26subBtnClick%3D0%26keyPress%3D14%26menuClick%3D0%26mouseMove%3D2407%26checkcode%3D0%26subBtnPosx%3D792%26subBtnPosy%3D521%26subBtnDelay%3D167%26keycode%3D97%2C115%2C100%2C115%2C115%2C97%2C100%2C97%2C115%2C100%2C109%2C107%2C119%2C55%26winWidth%3D1920%26winHeight%3D955%26userAgent%3DMozilla%2F5.0%20(Windows%20NT%206.1%3B%20WOW64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F47.0.2526.106%20Safari%2F537.36";
+        String rejectFake = "clickCount%3D11%26subBtnClick%3D0%26keyPress%3D12%26menuClick%3D0%26mouseMove%3D2241%26checkcode%3D0%26subBtnPosx%3D734%26subBtnPosy%3D745%26subBtnDelay%3D124%26keycode%3D100%2C97%2C115%2C115%2C100%2C97%2C115%2C100%2C119%2C106%2C51%2C121%26winWidth%3D1920%26winHeight%3D955%26userAgent%3DMozilla%2F5.0%20(Windows%20NT%206.1%3B%20WOW64)%20AppleWebKit%2F537.36%20(KHTML%2C%20like%20Gecko)%20Chrome%2F47.0.2526.106%20Safari%2F537.36";
         String replaceurl = "http://weibo.com/signup/v5/ajaxreg";
 
         params.put("birthday", birthday);
@@ -284,9 +281,10 @@ public class LoginSina {
         if(!smsUrl.equals("")){
             log.info("注册信息提交无误");
             //调用天码获取电话号码
+            String realPhone = "15003775556";
 //            TianMaAPI tianma = new TianMaAPI();
 //            List<String> phoneList = tianma.getPhone(10);
-            String realPhone = "15950545100";
+//
 //            while(true){
 //                for(String phone : phoneList){
 //                    //获取到号码其他号码就释放掉
@@ -318,7 +316,8 @@ public class LoginSina {
             configKeyPlus = RegexUtil.getMatchGroupRegex(html, "\\$CONFIG\\.key_plus = '(.*?)'");
             String rsaStr = rsaCrypt(configKey, configKeyPlus, realPhone);
 
-
+            /*
+            //发送验证短信
             url = "http://weibo.com/signup/v5/getpincode?entry=&mobile=" + rsaStr + "&_t=0&__rnd=" + System.currentTimeMillis();
             response = HttpUtils.doGet(url, headers);
             data = HttpUtils.getStringFromResponse(response);
@@ -329,6 +328,48 @@ public class LoginSina {
             String toPhone = RegexUtil.getMatchGroupRegex(data, "<span class=\"spc_txt\">(\\d{6})</span> 至 <span class=\"spc_txt\">(.*?)</span>", 2);
             toPhone = toPhone.replaceAll(" ", "");
             System.out.println("手机验证码：" + code + ",发送到：" + toPhone);
+            **/
+
+            //接收验证码（验证码可以为错误的）
+            url = "http://weibo.com/signup/v5/registercheck?entry=&checktype=checkPinMessage&_t=1&callback=STK_"+ System.currentTimeMillis();
+            response = HttpUtils.doGet(url, headers);
+            data = HttpUtils.getStringFromResponse(response);
+            data = EncodeUtils.unicdoeToGB2312(data).replaceAll("\\\\", "");
+            System.out.println(data);
+
+            url = "http://weibo.com/signup/v5/formcheck?page=email&type=sendsms&value=" + realPhone + "&zone=0086&callback=STK_" + System.currentTimeMillis();
+            response = HttpUtils.doGet(url, headers);
+            data = HttpUtils.getStringFromResponse(response);
+            data = EncodeUtils.unicdoeToGB2312(data).replaceAll("\\\\", "");
+            System.out.println(data);
+
+
+
+
+            if(data.contains("\"code\":\"100000") && data.contains("激活码发送成功")) {
+                params.put("zone", "0086");
+                //短信验证码啥都可以
+                params.put("pincode", "11111");
+                params.put("validateExtra", "1");
+                params.put("moible", realPhone);
+                url = "http://weibo.com/signup/v5/fullinfo";
+//                response = HttpUtils.doPost(url, headers, params);
+                response = HttpUtils.doPostByProxy(url, headers, params, true);
+                data = HttpUtils.getStringFromResponse(response);
+                System.out.println(data);
+                if (data.contains("code=100000")) {
+                    System.out.println("注册成功");
+                } else {
+                    String codeStr = RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)");
+                    codeStr = EncodeUtils.decodeURL(codeStr, "utf-8");
+                    System.out.println("注册失败,失败原因：" + codeStr );
+                }
+            }else{
+                System.out.println("号码：<" + realPhone + ">不能注册");
+            }
+
+
+
 
         }else{
             log.info("注册信息提交出现问题");
@@ -509,17 +550,17 @@ public class LoginSina {
     }
 
     public static void main(String[] args) {
-        String username = "yizh199203@sina.com";
+        String username = "yizh199205@sina.com";
         String password = "asdf1234";
 //        String nickName = "asdssadasd";
         String nickName = "asdf";
         LoginSina login = new LoginSina(username, password, nickName);
         login.dologinSina();
 
-//        String key = "BD325CE52FC6BA090AC0C7A2039236587F99C30FA518F601F2AD33019514EE5A4340A964853E1BDF5374AB4AC22F5CFF3288E5DB94E6752B4999972DF4E23DACACAE4E4DCFB6CBAE256F1B19C4BA892D54C7A3E068F93AB47EC50635556FC223F02CB1F520631E2F03E5509B6C1E24DFB7962BCD6DC74159BF0E5AFC03D9A00D";
-//        String keyplus = "10001";
-//        String mobile = "15950545100";
-//        String str = LoginSina.rsaCrypt(key, keyplus, mobile);
-//        System.out.println(str);
+        String key = "BD325CE52FC6BA090AC0C7A2039236587F99C30FA518F601F2AD33019514EE5A4340A964853E1BDF5374AB4AC22F5CFF3288E5DB94E6752B4999972DF4E23DACACAE4E4DCFB6CBAE256F1B19C4BA892D54C7A3E068F93AB47EC50635556FC223F02CB1F520631E2F03E5509B6C1E24DFB7962BCD6DC74159BF0E5AFC03D9A00D";
+        String keyplus = "10001";
+        String mobile = "17626042019";
+        String str = LoginSina.rsaCrypt(key, keyplus, mobile);
+        System.out.println(str);
     }
 }

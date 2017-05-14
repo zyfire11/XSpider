@@ -17,6 +17,7 @@ import org.apache.http.HttpVersion;
 import org.apache.http.NameValuePair;
 import org.apache.http.auth.AuthScope;
 import org.apache.http.auth.UsernamePasswordCredentials;
+import org.apache.http.client.AuthCache;
 import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.CredentialsProvider;
 import org.apache.http.client.HttpClient;
@@ -25,6 +26,7 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.params.ClientPNames;
+import org.apache.http.client.protocol.HttpClientContext;
 import org.apache.http.conn.ClientConnectionManager;
 import org.apache.http.conn.params.ConnRoutePNames;
 import org.apache.http.conn.params.ConnRouteParams;
@@ -37,6 +39,8 @@ import org.apache.http.entity.mime.MultipartEntity;
 import org.apache.http.entity.mime.content.ContentBody;
 import org.apache.http.entity.mime.content.FileBody;
 import org.apache.http.entity.mime.content.StringBody;
+import org.apache.http.impl.auth.BasicScheme;
+import org.apache.http.impl.client.BasicAuthCache;
 import org.apache.http.impl.client.BasicCredentialsProvider;
 import org.apache.http.impl.client.DefaultHttpClient;
 import org.apache.http.impl.conn.tsccm.ThreadSafeClientConnManager;
@@ -289,7 +293,49 @@ public class HttpUtils {
 		} 
 		return response;			
 	}
-	
+
+	//使用阿布云代理
+	public static HttpResponse doPostByProxy(String url,Map<String,String> headers,Map<String,String> params, boolean isSwitch){
+		HttpClient client = getAbuyunHttpClient(isSwitch);
+		AuthCache authCache = new BasicAuthCache();
+		HttpHost target = new HttpHost(ProxyConfig.proxyHost, ProxyConfig.proxyPort, "http");
+		// Generate BASIC scheme object and add it to the local
+		// auth cache
+		BasicScheme basicAuth = new BasicScheme();
+		authCache.put(target, basicAuth);
+
+		// Add AuthCache to the execution context
+		HttpClientContext localContext = HttpClientContext.create();
+		localContext.setAuthCache(authCache);
+
+		HttpPost postMethod=new HttpPost(url);
+		HttpResponse response=null;
+		try {
+			if(headers!=null && headers.keySet().size()>0){
+				for(String key:headers.keySet()){
+					postMethod.addHeader(key, headers.get(key));
+				}
+			}
+			List<NameValuePair> p=null;
+			if(params!=null && params.keySet().size()>0){
+				p=new ArrayList<NameValuePair>();
+				for(String key:params.keySet()){
+					p.add(new BasicNameValuePair(key,params.get(key)));
+				}
+			}
+			if(p!=null)
+				postMethod.setEntity(new UrlEncodedFormEntity(p,HTTP.UTF_8));
+//				postMethod.setEntity(new UrlEncodedFormEntity(p,"gb2312"));
+			response=client.execute(target, postMethod, localContext);
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return response;
+	}
+
+
 	/*
 	 * params :
 	 * url:  地址

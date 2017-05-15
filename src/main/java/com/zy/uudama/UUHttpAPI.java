@@ -29,7 +29,7 @@ import wuhao.tools.reader.PathUtil;
 
 public class UUHttpAPI {
 	private static String 	USERNAME = "xoknight";
-	private static String 	PASSWORD = "";
+	private static String 	PASSWORD = "aegis201314";
 	private static String   MAC;
 	private static int 		userId = 100;
 	private static String   userKey;

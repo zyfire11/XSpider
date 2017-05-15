@@ -8,6 +8,7 @@ import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.cookie.Cookie;
 import org.apache.log4j.Logger;
+import sun.rmi.runtime.Log;
 import wuhao.tools.reader.PathUtil;
 import wuhao.tools.utils.UUIDUtil;
 
@@ -37,9 +38,11 @@ import java.util.regex.Pattern;
  */
 public class LoginSina {
 
+
     private static String username;
     private static String password;
     private static String nickName;
+    private static String phoneNumber;
     private static String nonce;
     private static String rsakv;
     private static String servertime;
@@ -50,6 +53,7 @@ public class LoginSina {
     private static Map<String, String> headers = new HashMap<>();
     private static String locationUrl;
     private static String cookieStr;
+    private int                damaNum = 0;
 
     //手机号码rsa加密的公钥
     private static String configKey;
@@ -61,6 +65,14 @@ public class LoginSina {
         this.username = username;
         this.password = password;
         this.nickName = nickName;
+        init();
+    }
+
+    public LoginSina(String username, String password, String nickName, String phoneNumber){
+        this.username = username;
+        this.password = password;
+        this.nickName = nickName;
+        this.phoneNumber = phoneNumber;
         init();
     }
 
@@ -91,7 +103,9 @@ public class LoginSina {
     }
 
     //登录微博
-    public String dologinSina(){
+    public boolean dologinSina(){
+
+        boolean flag = false;
         System.out.println("---do login ");
         String url="http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)";//v1.3.17
         Map<String,String> headers=new HashMap<String,String>();
@@ -131,12 +145,15 @@ public class LoginSina {
         params.put("returntype", "META");
 //        params.put("ssosimplelogin", "1");
 
-        if(this.pcid!=null)
-//            params.put("pcid", pcid);
-            if(this.door!= null)
-                params.put("door", this.door);
+        if(this.pcid!=null) {
+            params.put("pcid", pcid);
+        }
+        if(this.door!= null) {
+            params.put("door", this.door);
+        }
 
-        HttpResponse response= HttpUtils.doPost(url, headers, params);
+//        HttpResponse response= HttpUtils.doPost(url, headers, params);
+        HttpResponse response= HttpUtils.doPostByProxy(url, headers, params, true);
         this.cookies=HttpUtils.getResponseCookies(response);
 
         System.out.println(HttpUtils.setCookie2String(this.cookies));
@@ -148,6 +165,39 @@ public class LoginSina {
             responseText= URLDecoder.decode(responseText, "GBK");
             if(!responseText.contains("retcode=0")){
 
+                if(damaNum < 2){
+                    damaNum ++;
+                    String imagePath = downloadCheckImageOne();
+                    this.nonce = getnonce();
+                    // Scanner s=new Scanner(System.in);
+                    if (responseText.contains("retcode=4049")) {
+                        System.out.println("请输入验证码:");
+                    } else if (responseText.contains("retcode=2070")) {
+                        System.out.println("验证码不正确，请再次输入验证码:");
+                    } else if (responseText.contains("retcode=101")) {
+                        System.out.println("用户名或密码不正确");
+//                        this.exMap.put("code", "3");
+//                        loginState = 101;
+                    }
+                    if (responseText.contains("retcode=4049") || responseText.contains("retcode=2070")) {
+                        try {
+                            //调用http接口
+                            UUHttpAPI uuApi = new UUHttpAPI();
+                            uuApi.setIMGPATH(imagePath);
+                            this.door = uuApi.getImageValue("1005");
+                            if(this.door==null){
+//                                this.exMap.put("code", "8");
+//                                this.exMap.put("message", "出现验证码但是验证码平台调用出错");
+                            }
+//							pauseLogin = true;
+                            // this.door=s.next();
+                            return dologinSina();
+                        } catch (Exception e) {
+                            // TODO Auto-generated catch block
+                            e.printStackTrace();
+                        }
+                    }
+                }
 //				this.door=s.next();
 //				return dologinSina();
             }else{
@@ -200,14 +250,42 @@ public class LoginSina {
             responseText = HttpUtils.getStringFromResponseByCharset(response, "utf8");
             System.out.println(responseText);
 
-            register(responseText, nickName);
+            flag = register(responseText, nickName);
         }
 
-        this.cookieStr = HttpUtils.setCookie2String(this.cookies);
-        return HttpUtils.setCookie2String(this.cookies);
+        return flag;
+//        this.cookieStr = HttpUtils.setCookie2String(this.cookies);
+//        return HttpUtils.setCookie2String(this.cookies);
     }
 
-    private void register(String html, String nickName){
+    // 下载验证码
+    private String downloadCheckImageOne() {
+        if (pcid == null) {
+            return null;
+        }
+        this.headers.remove("Content-Type");
+        if(this.cookies != null){
+            this.cookies.clear();
+        }
+        String cookieValue = HttpUtils.setCookie2String(this.cookies);
+        this.headers.put("Cookie", cookieValue);
+        String url = "http://login.sina.com.cn/cgi/pin.php?r=" + (long) (Math.random() * 100000000) + "&s=0&p=" + this.pcid;
+        HttpResponse response = HttpUtils.doGet(url, headers);
+//		HttpResponse response = HttpUtils.doGetByProxy(url, headers, false);
+        InputStream in = HttpUtils.getInputStreamFromResponse(response);
+        String path = PathUtil.getProjectRoot() + "/image/validate_code/" + UUIDUtil.getUUID(false) + ".jpeg";
+        File file = new File(path);
+        if (!file.getParentFile().exists()) {
+            file.getParentFile().mkdirs();
+        }
+        Utils.writeFileFromStream(path, in);
+        return path;
+    }
+
+
+    private boolean register(String html, String nickName){
+
+        boolean flag = false;
 
         Map<String, String> params = new HashMap<>();
         //校对用户名
@@ -260,6 +338,7 @@ public class LoginSina {
             params.put("pincode", pincode);
         }catch (Exception e){
             e.printStackTrace();
+            return false;
         }
 
 
@@ -281,7 +360,7 @@ public class LoginSina {
         if(!smsUrl.equals("")){
             log.info("注册信息提交无误");
             //调用天码获取电话号码
-            String realPhone = "15003775556";
+            String realPhone = phoneNumber;
 //            TianMaAPI tianma = new TianMaAPI();
 //            List<String> phoneList = tianma.getPhone(10);
 //
@@ -358,23 +437,22 @@ public class LoginSina {
                 data = HttpUtils.getStringFromResponse(response);
                 System.out.println(data);
                 if (data.contains("code=100000")) {
-                    System.out.println("注册成功");
+                    log.info("注册成功");
+                    flag = true;
                 } else {
                     String codeStr = RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)");
                     codeStr = EncodeUtils.decodeURL(codeStr, "utf-8");
-                    System.out.println("注册失败,失败原因：" + codeStr );
+                    log.info("注册失败,失败原因：" + codeStr );
                 }
             }else{
-                System.out.println("号码：<" + realPhone + ">不能注册");
+                log.info("号码：<" + realPhone + ">不能注册");
             }
-
-
-
 
         }else{
             log.info("注册信息提交出现问题");
         }
 
+        return flag;
     }
 
     // 下载验证码

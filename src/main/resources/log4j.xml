@@ -24,6 +24,20 @@
 		</layout>
 	</appender>
 
+	<appender name="LoginSina" class="org.apache.log4j.DailyRollingFileAppender">
+		<param name="File" value="${APP_PATH}/log/test/LoginSina.log" />
+		<param name="Threshold" value="INFO" />
+		<param name="DatePattern" value="'.'yyyy-MM-dd'.log'" />
+		<layout class="org.apache.log4j.PatternLayout">
+			<param name="ConversionPattern" value="%d{HH:mm:ss} %-5p %c [%t] %m%n" />
+		</layout>
+	</appender>
+
+	<logger name="com.zy.sina.LoginSina">
+		<level value="info"/>
+		<appender-ref ref="LoginSina" />
+	</logger>
+
 	<logger name="wuhao.tools.utils.HttpUtil">
 		<level value="error"/>
 		<appender-ref ref="CONSOLE" />

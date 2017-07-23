@@ -1,5 +1,6 @@
 package com.zy.sina;
 
+import com.zy.model.entity.StateCode;
 import com.zy.tianma.TianMaAPI;
 import com.zy.utils.*;
 import com.zy.uudama.UUHttpAPI;
@@ -21,6 +22,7 @@ import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.math.BigInteger;
 import java.net.URLDecoder;
+import java.net.URLEncoder;
 import java.security.InvalidKeyException;
 import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
@@ -103,9 +105,9 @@ public class LoginSina {
     }
 
     //登录微博
-    public boolean dologinSina(){
+    public Integer dologinSina(){
 
-        boolean flag = false;
+        int stateCode = 1;
         System.out.println("---do login ");
         String url="http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)";//v1.3.17
         Map<String,String> headers=new HashMap<String,String>();
@@ -156,7 +158,7 @@ public class LoginSina {
         HttpResponse response= HttpUtils.doPostByProxy(url, headers, params, true);
         this.cookies=HttpUtils.getResponseCookies(response);
 
-        System.out.println(HttpUtils.setCookie2String(this.cookies));
+//        System.out.println(HttpUtils.setCookie2String(this.cookies));
 
         this.headers=headers;
         String responseText=HttpUtils.getStringFromResponseByCharset(response, "gbk");
@@ -176,8 +178,7 @@ public class LoginSina {
                         System.out.println("验证码不正确，请再次输入验证码:");
                     } else if (responseText.contains("retcode=101")) {
                         System.out.println("用户名或密码不正确");
-//                        this.exMap.put("code", "3");
-//                        loginState = 101;
+                        stateCode = StateCode.EMAIL_ERROR;
                     }
                     if (responseText.contains("retcode=4049") || responseText.contains("retcode=2070")) {
                         try {
@@ -186,6 +187,12 @@ public class LoginSina {
                             uuApi.setIMGPATH(imagePath);
                             this.door = uuApi.getImageValue("1005");
                             if(this.door==null){
+                                if(uuApi.getUserId() < 0) {
+                                    stateCode = StateCode.UUDM_ARREARS;
+                                }else {
+                                    stateCode = StateCode.UUDM_ERROR;
+                                }
+
 //                                this.exMap.put("code", "8");
 //                                this.exMap.put("message", "出现验证码但是验证码平台调用出错");
                             }
@@ -203,32 +210,38 @@ public class LoginSina {
             }else{
                 System.out.println("login success!");
             }
+
+
+            String locationRegex = "location.replace\\(\\'(.*?)\\'\\);";
+
+            Pattern pattern = Pattern.compile(locationRegex);
+            Matcher matcher = pattern.matcher(responseText);
+            if(matcher.find()){
+                locationUrl = matcher.group(1);
+                System.out.println(locationUrl);
+            }
+
+
+            //切换cookie
+            headers.put("Host", "passport.weibo.com");
+            headers.put("Referer", "http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)");
+            headers.put("Upgrade-Insecure-Requests", "1");
+            String cookieStr = HttpUtils.setCookie2String(this.cookies);
+            headers.put("Cookie", cookieStr);
+
+//            response = HttpUtils.doGetNoDirect(locationUrl, headers);
+            response = HttpUtils.doGetNoDirectByProxy(locationUrl, headers, true);
+
+
+
         } catch (UnsupportedEncodingException e) {
             e.printStackTrace();
+            stateCode = StateCode.LOGIN_ERROR;
         }
 
-//		String locationRegex = "location.replace[\\s\\S]*\\\"(.*)\\\".;";
-        String locationRegex = "location.replace\\(\\'(.*?)\\'\\);";
-
-        Pattern pattern = Pattern.compile(locationRegex);
-        Matcher matcher = pattern.matcher(responseText);
-        if(matcher.find()){
-            locationUrl = matcher.group(1);
-            System.out.println(locationUrl);
+        if(response == null){
+            return StateCode.EMAIL_ERROR;
         }
-//
-//		HttpResponse response2=HttpUtils.doGet(locationUrl, this.headers);
-//		String text=HttpUtils.getStringFromResponse(response2);
-//		System.out.println(text);
-
-        //切换cookie
-        headers.put("Host", "passport.weibo.com");
-        headers.put("Referer", "http://login.sina.com.cn/sso/login.php?client=ssologin.js(v1.4.18)");
-        headers.put("Upgrade-Insecure-Requests", "1");
-        String cookieStr = HttpUtils.setCookie2String(this.cookies);
-        headers.put("Cookie", cookieStr);
-
-        response = HttpUtils.doGetNoDirect(locationUrl, headers);
         List<Header> headers2 = HttpUtils.getReponseHeaders(response);
         String reUrl = "";
         for(Header header : headers2){
@@ -236,6 +249,8 @@ public class LoginSina {
                 reUrl = header.getValue();
             }
         }
+
+
 
         //进入基本信息设置页面
         if(!reUrl.equals("")){
@@ -245,15 +260,21 @@ public class LoginSina {
             headers.put("Cookie", cookieStr);
             this.cookieStr = cookieStr;
             this.cookies = HttpUtils.getResponseCookies(response);
-            response = HttpUtils.doGet("http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com", headers);
+//            response = HttpUtils.doGet("http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com", headers);
+            response = HttpUtils.doGetByProxy("http://weibo.com/signup/full_info.php?nonick=1&lang=zh-cn&callback=http%3A%2F%2Fweibo.com", headers, true);
 
             responseText = HttpUtils.getStringFromResponseByCharset(response, "utf8");
-            System.out.println(responseText);
-
-            flag = register(responseText, nickName);
+//            System.out.println(responseText);
+            if(responseText.contains("File not found")){
+                stateCode = StateCode.EMAIL_REGISTERED;
+            }else {
+                stateCode = register(responseText, nickName);
+            }
         }
 
-        return flag;
+
+
+        return stateCode;
 //        this.cookieStr = HttpUtils.setCookie2String(this.cookies);
 //        return HttpUtils.setCookie2String(this.cookies);
     }
@@ -283,9 +304,9 @@ public class LoginSina {
     }
 
 
-    private boolean register(String html, String nickName){
+    private int register(String html, String nickName){
 
-        boolean flag = false;
+        int code = 1;
 
         Map<String, String> params = new HashMap<>();
         //校对用户名
@@ -327,6 +348,7 @@ public class LoginSina {
         params.put("replaceurl", replaceurl);
 
         //获取验证码
+        /**
         String path = downloadCheckImage(sinaid, regtime);
         try {
             UUHttpAPI api = new UUHttpAPI();
@@ -338,8 +360,11 @@ public class LoginSina {
             params.put("pincode", pincode);
         }catch (Exception e){
             e.printStackTrace();
-            return false;
+            return StateCode.UUDM_ERROR;
         }
+         **/
+        //此处验证码可以乱填
+        params.put("pincode", "yyyy");
 
 
         String url = "http://weibo.com/signup/v5/fullinfo";
@@ -352,9 +377,10 @@ public class LoginSina {
         headers.put("Content-Type", "application/x-www-form-urlencoded");
         headers.put("Cookie", cookieStr);
 
-        HttpResponse response = HttpUtils.doPost(url, headers, params);
+//        HttpResponse response = HttpUtils.doPost(url, headers, params);
+        HttpResponse response = HttpUtils.doPostByProxy(url, headers, params);
         String data = HttpUtils.getStringFromResponse(response);
-        System.out.println("提交注册表单得到：" + data);
+//        System.out.println("提交注册表单得到：" + data);
 
         String smsUrl = RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)");
         if(!smsUrl.equals("")){
@@ -411,13 +437,15 @@ public class LoginSina {
 
             //接收验证码（验证码可以为错误的）
             url = "http://weibo.com/signup/v5/registercheck?entry=&checktype=checkPinMessage&_t=1&callback=STK_"+ System.currentTimeMillis();
-            response = HttpUtils.doGet(url, headers);
+//            response = HttpUtils.doGet(url, headers);
+            response = HttpUtils.doGetByProxy(url, headers);
             data = HttpUtils.getStringFromResponse(response);
             data = EncodeUtils.unicdoeToGB2312(data).replaceAll("\\\\", "");
-            System.out.println(data);
+//            System.out.println(data);
 
             url = "http://weibo.com/signup/v5/formcheck?page=email&type=sendsms&value=" + realPhone + "&zone=0086&callback=STK_" + System.currentTimeMillis();
-            response = HttpUtils.doGet(url, headers);
+//            response = HttpUtils.doGet(url, headers);
+            response = HttpUtils.doGetByProxy(url, headers);
             data = HttpUtils.getStringFromResponse(response);
             data = EncodeUtils.unicdoeToGB2312(data).replaceAll("\\\\", "");
             System.out.println(data);
@@ -428,31 +456,65 @@ public class LoginSina {
             if(data.contains("\"code\":\"100000") && data.contains("激活码发送成功")) {
                 params.put("zone", "0086");
                 //短信验证码啥都可以
-                params.put("pincode", "11111");
+                params.put("pincode", "596458");
                 params.put("validateExtra", "1");
                 params.put("moible", realPhone);
                 url = "http://weibo.com/signup/v5/fullinfo";
 //                response = HttpUtils.doPost(url, headers, params);
                 response = HttpUtils.doPostByProxy(url, headers, params, true);
                 data = HttpUtils.getStringFromResponse(response);
-                System.out.println(data);
+                try {
+                    System.out.println("手机验证码提交后得到：<" + EncodeUtils.unicdoeToGB2312(URLDecoder.decode(RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)"),"utf8")) + ">");
+                } catch (UnsupportedEncodingException e) {
+                    e.printStackTrace();
+                }
                 if (data.contains("code=100000")) {
                     log.info("注册成功");
-                    flag = true;
+                    code = StateCode.SUCCESS;
                 } else {
                     String codeStr = RegexUtil.getMatchGroupRegex(data, "location.replace\\(\"(.*?)\"\\)");
-                    codeStr = EncodeUtils.decodeURL(codeStr, "utf-8");
+                    codeStr = EncodeUtils.unicdoeToGB2312(EncodeUtils.decodeURL(codeStr, "utf-8"));
                     log.info("注册失败,失败原因：" + codeStr );
+                    code = StateCode.PHONE_REGISTER_FREQUENTLY;
                 }
             }else{
                 log.info("号码：<" + realPhone + ">不能注册");
+                code = StateCode.PHONE_REGISTERED;
             }
 
         }else{
             log.info("注册信息提交出现问题");
+            code = StateCode.LOGIN_INFO_ERROR;
         }
 
-        return flag;
+        //兴趣选择
+        if(code == StateCode.SUCCESS){
+            url = "http://weibo.com/nguide/aj/finish4";
+            params = new HashMap<>();
+            params.put("data", "{\"1042015:tagCategory_033\":[\"1992769421\",\"5337879011\",\"3487640507\",\"1769684987\",\"3945917804\"]}");
+            headers = new HashMap<>();
+            headers.put("Host", "weibo.com");
+            headers.put("Origin", "http://weibo.com");
+            headers.put("X-Requested-With", "XMLHttpRequest");
+            headers.put("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.106 Safari/537.36");
+            headers.put("Content-Type", "application/x-www-form-urlencoded");
+            headers.put("Accept", "*/*");
+            headers.put("Referer", "http://weibo.com/nguide/interests");
+            headers.put("Accept-Language", "zh-CN,zh;q=0.8");
+            headers.put("Cookie", cookieStr);
+
+            response = HttpUtils.doPostByProxy(url, headers, params);
+            data = HttpUtils.getStringFromResponse(response);
+            System.out.println(data);
+            if(data.contains("\"code\":\"100000\"")){
+                System.out.println("兴趣关注成功");
+            }else{
+                System.out.println("兴趣关注失败");
+            }
+
+        }
+
+        return code;
     }
 
     // 下载验证码

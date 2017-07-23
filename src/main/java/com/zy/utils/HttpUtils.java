@@ -94,6 +94,10 @@ public class HttpUtils {
 		return response;		
 	}
 
+	public static HttpResponse doGetByProxy(String url,Map<String,String> headers){
+		return  doGetByProxy(url, headers, true);
+	}
+
 	public static HttpResponse doGetByProxy(String url,Map<String,String> headers, boolean isSwitch){
 		HttpClient client=getAbuyunHttpClient(isSwitch);
 		client.getParams().setParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, 60000);
@@ -149,6 +153,34 @@ public class HttpUtils {
 		} catch(Exception e){
 		}
 		return response;		
+	}
+
+	public static HttpResponse doGetNoDirectByProxy(String url,Map<String,String> headers, boolean isSwitch){
+		HttpClient client=getAbuyunHttpClient(isSwitch);
+		client.getParams().setParameter(CoreConnectionPNames.CONNECTION_TIMEOUT, 60000);
+//		client.getParams().setParameter(ClientPNames.ALLOW_CIRCULAR_REDIRECTS, true);
+		client.getParams().setParameter(ClientPNames.HANDLE_REDIRECTS, false);
+		HttpGet getMethod=new HttpGet(url);
+		HttpResponse response=null;
+		try {
+			if(headers!=null && headers.keySet().size()>0){
+				for(String key:headers.keySet()){
+					getMethod.addHeader(key, headers.get(key));
+				}
+			}
+			response=client.execute(getMethod);
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			String msg=e.getMessage();
+			if(msg.contains("Truncated chunk")){
+				System.out.println(e.getMessage() +" 数据获取不完整。需要重新获取。");
+			}else{
+				System.out.println(e.getMessage() +" 连接 被拒绝。需要降低爬取频率。");
+			}
+		} catch(Exception e){
+		}
+		return response;
 	}
 	
 	public static HttpResponse doGetNoDirect(String url,Map<String,String> headers){
@@ -292,6 +324,10 @@ public class HttpUtils {
 			e.printStackTrace();
 		} 
 		return response;			
+	}
+
+	public static HttpResponse doPostByProxy(String url,Map<String,String> headers,Map<String,String> params){
+		return doPostByProxy(url, headers, params, true);
 	}
 
 	//使用阿布云代理

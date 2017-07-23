@@ -1,14 +1,15 @@
+package com;
+
 import com.zy.utils.EncodeUtils;
 import org.junit.Test;
 
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
-import java.net.URLEncoder;
 
 /**
  * Created by zhouyi on 2017/5/14.
  */
-public class TEst {
+public class Test1 {
 
     @Test
     public void test(){
